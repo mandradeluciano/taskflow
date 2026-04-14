@@ -458,7 +458,7 @@ function refresh(){
 }
 
 window.TF={
-  async login(){try{$i('loading-screen').style.display='flex';$i('login-screen').style.display='none';await signInWithPopup(auth,gp)}catch(e){$i('loading-screen').style.display='none';$i('login-screen').style.display='flex';toast('Erro: '+e.message,true)}},
+  async login(){try{$i('loading-screen').style.display='flex';$i('login-screen').style.display='none';await signInWithRedirect(auth,gp)}catch(e){$i('loading-screen').style.display='none';$i('login-screen').style.display='flex';toast('Erro: '+e.message,true)}},
   async demo(){try{$i('loading-screen').style.display='flex';$i('login-screen').style.display='none';await signInAnonymously(auth)}catch(e){$i('loading-screen').style.display='none';$i('login-screen').style.display='flex';toast('Erro: '+e.message,true)}},
   async logout(){if(unsub)unsub();await signOut(auth)},
 
