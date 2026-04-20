@@ -9707,6 +9707,7 @@ TF.exportExcel = function(){
   URL.revokeObjectURL(url);
   toast('📊 Excel exportado ('+rows.length+' tarefas)');
 };
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 9711 (after Excel export)');
 
 // ═══════════════════════════════════════════════════════════════
 // 7. DASHBOARD RICO — gráfico pizza + barras
@@ -10013,6 +10014,7 @@ document.addEventListener('touchstart', function(){}, {passive: true});
     // Note: swipe left for delete removed (too easy to accidentally trigger)
   }, {passive: true});
 })();
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 10017 (after mobile swipe)');
 
 // ══════════════════════════════════════
 // IMPROVEMENTS V6 — SPRINTS · FOCO · IA
@@ -10395,6 +10397,7 @@ addNotif = function(type, title, body, taskId){
   sendPushNotif('TaskFlow — '+title, body||'', taskId);
   return result;
 };
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 10401 (before Pomodoro section)');
 
 // ═══════════════════════════════════════════════════════
 // PACK MÉDIO 3: Modo foco — Pomodoro integrado
@@ -10691,6 +10694,7 @@ TF.showCapacityReport = function(){
   document.getElementById('cap-close').onclick=function(){box.remove();};
   box.onclick=function(e){if(e.target===box)box.remove();};
 };
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 10698 (before Slack integration)');
 
 // ═══════════════════════════════════════════════════════
 // PACK ESTRATÉGICO 3: Integração Slack via webhook
@@ -11090,6 +11094,8 @@ TF.deleteTemplate = function(id){
   // View transition: CSS handles this via .view-enter class
 
 
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 11097 (before color themes)');
+
 // ══════════════════════════════════════════════════════
 // PACK EDIÇÃO 4 — Temas de cores customizáveis
 // ══════════════════════════════════════════════════════
@@ -11331,6 +11337,7 @@ TF.approveTask = async function(taskId, approved){
     if(approved && typeof showConfetti==='function') showConfetti();
   }catch(e){ toast('Erro: '+e.message,'err'); }
 };
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 11340 (before time report)');
 // ══════════════════════════════════════════════════════
 // PACK DADOS 1 — Relatório de tempo detalhado
 // ══════════════════════════════════════════════════════
@@ -11442,6 +11449,7 @@ TF.exportTimeCSV = function(){
   URL.revokeObjectURL(a.href);
   toast('⬇ Relatório de tempo exportado!');
 };
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 11453 (before executive dashboard)');
 
 // ══════════════════════════════════════════════════════
 // PACK DADOS 2 — Dashboard executivo consolidado
@@ -11582,6 +11590,7 @@ TF.showExecutiveDashboard = function(){
   document.getElementById('ed-close').onclick=function(){box.remove();};
   box.onclick=function(e){if(e.target===box)box.remove();};
 };
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 11594 (before List View)');
 
 // ══════════════════════════════════════════════════════
 // PACK DADOS 3 — View Lista
