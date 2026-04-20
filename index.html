@@ -1793,7 +1793,16 @@ onAuthStateChanged(auth,user=>{
     (async function(){
       var db2 = window._db;
       for(var i=0;i<30&&!db2;i++){ await new Promise(function(r){setTimeout(r,200);}); db2=window._db; }
-      if(db2) await loadUserWorkspaces(user);
+      // Wait for loadUserWorkspaces to be defined (it lives later in the module)
+      for(var j=0;j<50&&typeof loadUserWorkspaces!=='function'&&typeof window.loadUserWorkspaces!=='function';j++){
+        await new Promise(function(r){setTimeout(r,100);});
+      }
+      var fn = (typeof loadUserWorkspaces==='function')?loadUserWorkspaces:window.loadUserWorkspaces;
+      if(db2 && typeof fn==='function'){
+        try{ await fn(user); }catch(e){ console.error('[TaskFlow] loadUserWorkspaces falhou:', e); }
+      } else {
+        console.error('[TaskFlow] loadUserWorkspaces não foi encontrada após espera. O botão de criar área de trabalho ainda deve funcionar manualmente.');
+      }
     })();setTimeout(checkDueTasks,5000);
     setTimeout(checkWeeklyDigest,7000);
     setTimeout(function(){loadPendingNotifications(cu);},4000);setTimeout(function(){TF.checkJoinToken&&TF.checkJoinToken();},2000);setTimeout(initPresence,5000);
@@ -11906,6 +11915,17 @@ TF._renameWorkspace = async function(){
     toast('✓ Área renomeada!');
   }catch(e){ toast('Erro: '+e.message,'err'); }
 };
+
+// ── Expose workspace functions globally as defensive fallback ──
+// Handles cases where module-scope hoisting behaves unexpectedly (e.g. some Safari versions)
+try{
+  if(typeof loadUserWorkspaces==='function') window.loadUserWorkspaces=loadUserWorkspaces;
+  if(typeof switchWorkspace==='function') window.switchWorkspace=switchWorkspace;
+  if(typeof createWorkspace==='function') window.createWorkspace=createWorkspace;
+  if(typeof joinWorkspaceByCode==='function') window.joinWorkspaceByCode=joinWorkspaceByCode;
+  if(typeof renderWorkspaceHeader==='function') window.renderWorkspaceHeader=renderWorkspaceHeader;
+  if(typeof showWorkspaceOnboarding==='function') window.showWorkspaceOnboarding=showWorkspaceOnboarding;
+}catch(e){ console.warn('[TaskFlow] expose workspace fns:',e); }
 
 
 // ═══════════════════════════════════════════════════════════════════
