@@ -1272,7 +1272,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
   <div id="mob-overlay" onclick="TF.mobCloseSidebar()"></div>
   <aside class="sidebar">
     <div id="ws-header" style="border-bottom:.5px solid var(--border);margin-bottom:4px">
-      <div onclick="TFsafeShowWS()" id="ws-cta" style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;cursor:pointer;border-radius:8px;margin:4px 6px;border:1px dashed var(--border2);background:var(--bg3)">
+      <div onclick="TF.showWorkspaceSwitcher&&TF.showWorkspaceSwitcher()" id="ws-cta" style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;cursor:pointer;border-radius:8px;margin:4px 6px;border:1px dashed var(--border2);background:var(--bg3)">
         <div style="width:28px;height:28px;border-radius:7px;background:var(--accent);color:white;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🏢</div>
         <div style="flex:1">
           <div id="ws-btn-title" style="font-size:12.5px;font-weight:600;color:var(--accent2)">Criar área de trabalho</div>
@@ -1699,94 +1699,6 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
 
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script>
-// ═══════════════════════════════════════════════════════════════════
-// TaskFlow — Safety layer (runs before main module)
-// Exists to guarantee the "Criar área de trabalho" button always responds,
-// even if the main module has a runtime error that aborts its execution.
-// ═══════════════════════════════════════════════════════════════════
-
-// Catch any unhandled errors and log them prominently so we can diagnose
-window.addEventListener('error', function(ev){
-  console.error('[TaskFlow/GlobalError]', ev.message, 'at', ev.filename+':'+ev.lineno+':'+ev.colno, ev.error||'');
-});
-window.addEventListener('unhandledrejection', function(ev){
-  console.error('[TaskFlow/UnhandledRejection]', ev.reason);
-});
-
-// Safe click handler for the "Criar área de trabalho" button.
-// Tries the official function first; if unavailable, provides a minimal
-// emergency fallback that creates a workspace using Firebase directly.
-window.TFsafeShowWS = function(){
-  try{
-    if(window.TF && typeof window.TF.showWorkspaceSwitcher === 'function'){
-      window.TF.showWorkspaceSwitcher();
-      return;
-    }
-    console.warn('[TaskFlow] Using emergency fallback for workspace creation (TF.showWorkspaceSwitcher not defined — main module likely crashed. Check console for the first red error above).');
-    TFemergencyWorkspaceModal();
-  }catch(e){
-    console.error('[TaskFlow] Error in safe click handler:', e);
-    TFemergencyWorkspaceModal();
-  }
-};
-
-// Minimal emergency modal — works without depending on the main module's code
-window.TFemergencyWorkspaceModal = function(){
-  var old = document.getElementById('tf-emergency-ws');
-  if(old){ old.remove(); return; }
-  var box = document.createElement('div');
-  box.id = 'tf-emergency-ws';
-  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif';
-  box.innerHTML =
-    '<div style="background:#fff;border-radius:14px;width:420px;max-width:95vw;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4)">'
-    +'<div style="font-size:16px;font-weight:600;margin-bottom:4px;color:#1a1a1a">🏢 Nova área de trabalho</div>'
-    +'<div style="font-size:12px;color:#888;margin-bottom:16px">Modo de recuperação — o app principal teve um erro. Você ainda pode criar uma área aqui.</div>'
-    +'<label style="font-size:12px;color:#555;font-weight:500;display:block;margin-bottom:5px">Nome da empresa *</label>'
-    +'<input id="tf-emg-name" placeholder="Ex: Minha Empresa" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:16px;box-sizing:border-box">'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +'<button id="tf-emg-cancel" style="padding:10px;border-radius:8px;background:#f4f4f4;border:1px solid #ddd;cursor:pointer;font-size:13px;color:#333">Cancelar</button>'
-    +'<button id="tf-emg-create" style="padding:10px;border-radius:8px;background:#6c5ce7;color:white;border:none;cursor:pointer;font-size:13px;font-weight:500">Criar</button>'
-    +'</div>'
-    +'<div style="margin-top:14px;padding-top:14px;border-top:1px solid #eee;font-size:11px;color:#999">Se o problema persistir, abra F12 → Console e copie a primeira mensagem em vermelho.</div>'
-    +'</div>';
-  document.body.appendChild(box);
-  box.onclick = function(e){ if(e.target===box) box.remove(); };
-  setTimeout(function(){ var i=document.getElementById('tf-emg-name'); if(i) i.focus(); }, 50);
-  document.getElementById('tf-emg-cancel').onclick = function(){ box.remove(); };
-  document.getElementById('tf-emg-create').onclick = async function(){
-    var name = (document.getElementById('tf-emg-name')||{}).value || '';
-    if(!name.trim()){ alert('Digite o nome'); return; }
-    var user = window.cu || window._currentUser;
-    if(!user){ alert('Você precisa estar logado'); return; }
-    if(!window._db){ alert('Conexão com banco ainda não pronta. Tente novamente em alguns segundos.'); return; }
-    try{
-      var fb = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      var ref = fb.doc(fb.collection(window._db, 'workspaces'));
-      var ws = {
-        name: name.trim(),
-        ownerId: user.uid,
-        members: [user.uid],
-        adminIds: [user.uid],
-        plan: 'free',
-        createdAt: fb.serverTimestamp(),
-        inviteCode: Math.random().toString(36).slice(2,8).toUpperCase(),
-        logo: '',
-        color: '#6c5ce7',
-        settings: {}
-      };
-      await fb.setDoc(ref, ws);
-      localStorage.setItem('tf_workspace_' + user.uid, ref.id);
-      box.remove();
-      alert('✓ Área "' + name + '" criada! A página vai recarregar.');
-      location.reload();
-    }catch(e){
-      console.error('[TaskFlow/Emergency] Falha criando workspace:', e);
-      alert('Erro: ' + e.message);
-    }
-  };
-};
-</script>
 <script type="module">
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import{initializeFirestore,getFirestore,collection,addDoc,onSnapshot,doc,updateDoc,deleteDoc,query,where,serverTimestamp,getDocs,getDoc,setDoc}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -1881,16 +1793,7 @@ onAuthStateChanged(auth,user=>{
     (async function(){
       var db2 = window._db;
       for(var i=0;i<30&&!db2;i++){ await new Promise(function(r){setTimeout(r,200);}); db2=window._db; }
-      // Wait for loadUserWorkspaces to be defined (it lives later in the module)
-      for(var j=0;j<50&&typeof loadUserWorkspaces!=='function'&&typeof window.loadUserWorkspaces!=='function';j++){
-        await new Promise(function(r){setTimeout(r,100);});
-      }
-      var fn = (typeof loadUserWorkspaces==='function')?loadUserWorkspaces:window.loadUserWorkspaces;
-      if(db2 && typeof fn==='function'){
-        try{ await fn(user); }catch(e){ console.error('[TaskFlow] loadUserWorkspaces falhou:', e); }
-      } else {
-        console.error('[TaskFlow] loadUserWorkspaces não foi encontrada após espera. O botão de criar área de trabalho ainda deve funcionar manualmente.');
-      }
+      if(db2) await loadUserWorkspaces(user);
     })();setTimeout(checkDueTasks,5000);
     setTimeout(checkWeeklyDigest,7000);
     setTimeout(function(){loadPendingNotifications(cu);},4000);setTimeout(function(){TF.checkJoinToken&&TF.checkJoinToken();},2000);setTimeout(initPresence,5000);
@@ -5220,7 +5123,6 @@ TF.doTransfer = async function(taskId){
 // ════════════════════════════════════════════════════════════════
 // SISTEMA COMPLETO DE AUTENTICAÇÃO E GESTÃO DE USUÁRIOS
 // ════════════════════════════════════════════════════════════════
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 5220 (before AUTH section)');
 
 // ── AUTH TABS ──
 var authMode = 'login'; // 'login' | 'register'
@@ -7822,7 +7724,6 @@ async function fireWebhook(event, task){
 
 
 // ── FEATURES PACK v3 ──
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 7824 (before FEATURES PACK v3)');
 
 // ═══════════════════════════════════════════════════════════════
 // 1. ANÚNCIOS DA EQUIPE — admin posta avisos visíveis a todos
@@ -9386,7 +9287,6 @@ TF.toggleAIInput = function(){
 };
 
 // ── FINAL IMPROVEMENTS ──
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 9388 (before FINAL IMPROVEMENTS)');
 
 // ═══════════════════════════════════════════════════════════════
 // 1. TOOLTIP NOS CARDS DO KANBAN
@@ -9707,7 +9607,6 @@ TF.exportExcel = function(){
   URL.revokeObjectURL(url);
   toast('📊 Excel exportado ('+rows.length+' tarefas)');
 };
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 9711 (after Excel export)');
 
 // ═══════════════════════════════════════════════════════════════
 // 7. DASHBOARD RICO — gráfico pizza + barras
@@ -10014,7 +9913,6 @@ document.addEventListener('touchstart', function(){}, {passive: true});
     // Note: swipe left for delete removed (too easy to accidentally trigger)
   }, {passive: true});
 })();
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 10017 (after mobile swipe)');
 
 // ══════════════════════════════════════
 // IMPROVEMENTS V6 — SPRINTS · FOCO · IA
@@ -10397,7 +10295,6 @@ addNotif = function(type, title, body, taskId){
   sendPushNotif('TaskFlow — '+title, body||'', taskId);
   return result;
 };
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 10401 (before Pomodoro section)');
 
 // ═══════════════════════════════════════════════════════
 // PACK MÉDIO 3: Modo foco — Pomodoro integrado
@@ -10694,7 +10591,6 @@ TF.showCapacityReport = function(){
   document.getElementById('cap-close').onclick=function(){box.remove();};
   box.onclick=function(e){if(e.target===box)box.remove();};
 };
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 10698 (before Slack integration)');
 
 // ═══════════════════════════════════════════════════════
 // PACK ESTRATÉGICO 3: Integração Slack via webhook
@@ -11095,8 +10991,6 @@ TF.deleteTemplate = function(id){
 })();
 
 
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 11097 (before color themes)');
-
 // ══════════════════════════════════════════════════════
 // PACK EDIÇÃO 4 — Temas de cores customizáveis
 // ══════════════════════════════════════════════════════
@@ -11338,7 +11232,6 @@ TF.approveTask = async function(taskId, approved){
     if(approved && typeof showConfetti==='function') showConfetti();
   }catch(e){ toast('Erro: '+e.message,'err'); }
 };
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 11340 (before time report)');
 // ══════════════════════════════════════════════════════
 // PACK DADOS 1 — Relatório de tempo detalhado
 // ══════════════════════════════════════════════════════
@@ -11450,7 +11343,6 @@ TF.exportTimeCSV = function(){
   URL.revokeObjectURL(a.href);
   toast('⬇ Relatório de tempo exportado!');
 };
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 11453 (before executive dashboard)');
 
 // ══════════════════════════════════════════════════════
 // PACK DADOS 2 — Dashboard executivo consolidado
@@ -11591,7 +11483,6 @@ TF.showExecutiveDashboard = function(){
   document.getElementById('ed-close').onclick=function(){box.remove();};
   box.onclick=function(e){if(e.target===box)box.remove();};
 };
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 11594 (before List View)');
 
 // ══════════════════════════════════════════════════════
 // PACK DADOS 3 — View Lista
@@ -11686,7 +11577,6 @@ var _currentWorkspace = null;
 var _userWorkspaces = [];
 window._currentWorkspace = null;
 window._userWorkspaces = [];
-console.log('[TaskFlow/checkpoint] ✓ passed ~line 11678 (workspace state init — just before loadUserWorkspaces declaration)');
 
 // ── Load workspaces for current user ──
 async function loadUserWorkspaces(user){
@@ -12018,17 +11908,6 @@ TF._renameWorkspace = async function(){
   }catch(e){ toast('Erro: '+e.message,'err'); }
 };
 
-// ── Expose workspace functions globally as defensive fallback ──
-// Handles cases where module-scope hoisting behaves unexpectedly (e.g. some Safari versions)
-try{
-  if(typeof loadUserWorkspaces==='function') window.loadUserWorkspaces=loadUserWorkspaces;
-  if(typeof switchWorkspace==='function') window.switchWorkspace=switchWorkspace;
-  if(typeof createWorkspace==='function') window.createWorkspace=createWorkspace;
-  if(typeof joinWorkspaceByCode==='function') window.joinWorkspaceByCode=joinWorkspaceByCode;
-  if(typeof renderWorkspaceHeader==='function') window.renderWorkspaceHeader=renderWorkspaceHeader;
-  if(typeof showWorkspaceOnboarding==='function') window.showWorkspaceOnboarding=showWorkspaceOnboarding;
-}catch(e){ console.warn('[TaskFlow] expose workspace fns:',e); }
-
 
 // ═══════════════════════════════════════════════════════════════════
 // WORKSPACE UI — Sidebar, Dashboard multi-área, filtros
@@ -12284,7 +12163,6 @@ TF.adminAssignTeams = async function(uid, email){
   if(grid) grid.onclick=function(e){var ch=e.target.closest('.team-chip');if(ch)ch.classList.toggle('sel');};
   box.onclick=function(e){if(e.target===box) closeModal();};
 };
-console.log('[TaskFlow/checkpoint] ✓ ✓ ✓ MODULE FULLY LOADED — all code ran to completion');
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </body>
