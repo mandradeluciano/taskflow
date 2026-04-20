@@ -5220,6 +5220,7 @@ TF.doTransfer = async function(taskId){
 // ════════════════════════════════════════════════════════════════
 // SISTEMA COMPLETO DE AUTENTICAÇÃO E GESTÃO DE USUÁRIOS
 // ════════════════════════════════════════════════════════════════
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 5220 (before AUTH section)');
 
 // ── AUTH TABS ──
 var authMode = 'login'; // 'login' | 'register'
@@ -7821,6 +7822,7 @@ async function fireWebhook(event, task){
 
 
 // ── FEATURES PACK v3 ──
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 7824 (before FEATURES PACK v3)');
 
 // ═══════════════════════════════════════════════════════════════
 // 1. ANÚNCIOS DA EQUIPE — admin posta avisos visíveis a todos
@@ -9384,6 +9386,7 @@ TF.toggleAIInput = function(){
 };
 
 // ── FINAL IMPROVEMENTS ──
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 9388 (before FINAL IMPROVEMENTS)');
 
 // ═══════════════════════════════════════════════════════════════
 // 1. TOOLTIP NOS CARDS DO KANBAN
@@ -11673,6 +11676,7 @@ var _currentWorkspace = null;
 var _userWorkspaces = [];
 window._currentWorkspace = null;
 window._userWorkspaces = [];
+console.log('[TaskFlow/checkpoint] ✓ passed ~line 11678 (workspace state init — just before loadUserWorkspaces declaration)');
 
 // ── Load workspaces for current user ──
 async function loadUserWorkspaces(user){
@@ -12270,6 +12274,7 @@ TF.adminAssignTeams = async function(uid, email){
   if(grid) grid.onclick=function(e){var ch=e.target.closest('.team-chip');if(ch)ch.classList.toggle('sel');};
   box.onclick=function(e){if(e.target===box) closeModal();};
 };
+console.log('[TaskFlow/checkpoint] ✓ ✓ ✓ MODULE FULLY LOADED — all code ran to completion');
 });</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </body>
