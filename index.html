@@ -1272,7 +1272,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
   <div id="mob-overlay" onclick="TF.mobCloseSidebar()"></div>
   <aside class="sidebar">
     <div id="ws-header" style="border-bottom:.5px solid var(--border);margin-bottom:4px">
-      <div onclick="(function(){try{if(typeof TF!=='undefined'&&typeof TF.showWorkspaceSwitcher==='function'){TF.showWorkspaceSwitcher()}else{console.error('[TaskFlow] TF.showWorkspaceSwitcher não está definido. Verifique se houve erro anterior no console.');if(typeof toast==='function'){toast('Não foi possível abrir — veja o console (F12)','err')}else{alert('Não foi possível abrir o criador de área de trabalho. Abra o console (F12) para ver o erro.')}}}catch(e){console.error('[TaskFlow] Erro ao abrir workspace switcher:',e);if(typeof toast==='function')toast('Erro: '+e.message,'err')}})()" id="ws-cta" style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;cursor:pointer;border-radius:8px;margin:4px 6px;border:1px dashed var(--border2);background:var(--bg3)">
+      <div onclick="TFsafeShowWS()" id="ws-cta" style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;cursor:pointer;border-radius:8px;margin:4px 6px;border:1px dashed var(--border2);background:var(--bg3)">
         <div style="width:28px;height:28px;border-radius:7px;background:var(--accent);color:white;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🏢</div>
         <div style="flex:1">
           <div id="ws-btn-title" style="font-size:12.5px;font-weight:600;color:var(--accent2)">Criar área de trabalho</div>
@@ -1699,6 +1699,94 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
 
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// TaskFlow — Safety layer (runs before main module)
+// Exists to guarantee the "Criar área de trabalho" button always responds,
+// even if the main module has a runtime error that aborts its execution.
+// ═══════════════════════════════════════════════════════════════════
+
+// Catch any unhandled errors and log them prominently so we can diagnose
+window.addEventListener('error', function(ev){
+  console.error('[TaskFlow/GlobalError]', ev.message, 'at', ev.filename+':'+ev.lineno+':'+ev.colno, ev.error||'');
+});
+window.addEventListener('unhandledrejection', function(ev){
+  console.error('[TaskFlow/UnhandledRejection]', ev.reason);
+});
+
+// Safe click handler for the "Criar área de trabalho" button.
+// Tries the official function first; if unavailable, provides a minimal
+// emergency fallback that creates a workspace using Firebase directly.
+window.TFsafeShowWS = function(){
+  try{
+    if(window.TF && typeof window.TF.showWorkspaceSwitcher === 'function'){
+      window.TF.showWorkspaceSwitcher();
+      return;
+    }
+    console.warn('[TaskFlow] Using emergency fallback for workspace creation (TF.showWorkspaceSwitcher not defined — main module likely crashed. Check console for the first red error above).');
+    TFemergencyWorkspaceModal();
+  }catch(e){
+    console.error('[TaskFlow] Error in safe click handler:', e);
+    TFemergencyWorkspaceModal();
+  }
+};
+
+// Minimal emergency modal — works without depending on the main module's code
+window.TFemergencyWorkspaceModal = function(){
+  var old = document.getElementById('tf-emergency-ws');
+  if(old){ old.remove(); return; }
+  var box = document.createElement('div');
+  box.id = 'tf-emergency-ws';
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif';
+  box.innerHTML =
+    '<div style="background:#fff;border-radius:14px;width:420px;max-width:95vw;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4)">'
+    +'<div style="font-size:16px;font-weight:600;margin-bottom:4px;color:#1a1a1a">🏢 Nova área de trabalho</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:16px">Modo de recuperação — o app principal teve um erro. Você ainda pode criar uma área aqui.</div>'
+    +'<label style="font-size:12px;color:#555;font-weight:500;display:block;margin-bottom:5px">Nome da empresa *</label>'
+    +'<input id="tf-emg-name" placeholder="Ex: Minha Empresa" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:16px;box-sizing:border-box">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<button id="tf-emg-cancel" style="padding:10px;border-radius:8px;background:#f4f4f4;border:1px solid #ddd;cursor:pointer;font-size:13px;color:#333">Cancelar</button>'
+    +'<button id="tf-emg-create" style="padding:10px;border-radius:8px;background:#6c5ce7;color:white;border:none;cursor:pointer;font-size:13px;font-weight:500">Criar</button>'
+    +'</div>'
+    +'<div style="margin-top:14px;padding-top:14px;border-top:1px solid #eee;font-size:11px;color:#999">Se o problema persistir, abra F12 → Console e copie a primeira mensagem em vermelho.</div>'
+    +'</div>';
+  document.body.appendChild(box);
+  box.onclick = function(e){ if(e.target===box) box.remove(); };
+  setTimeout(function(){ var i=document.getElementById('tf-emg-name'); if(i) i.focus(); }, 50);
+  document.getElementById('tf-emg-cancel').onclick = function(){ box.remove(); };
+  document.getElementById('tf-emg-create').onclick = async function(){
+    var name = (document.getElementById('tf-emg-name')||{}).value || '';
+    if(!name.trim()){ alert('Digite o nome'); return; }
+    var user = window.cu || window._currentUser;
+    if(!user){ alert('Você precisa estar logado'); return; }
+    if(!window._db){ alert('Conexão com banco ainda não pronta. Tente novamente em alguns segundos.'); return; }
+    try{
+      var fb = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      var ref = fb.doc(fb.collection(window._db, 'workspaces'));
+      var ws = {
+        name: name.trim(),
+        ownerId: user.uid,
+        members: [user.uid],
+        adminIds: [user.uid],
+        plan: 'free',
+        createdAt: fb.serverTimestamp(),
+        inviteCode: Math.random().toString(36).slice(2,8).toUpperCase(),
+        logo: '',
+        color: '#6c5ce7',
+        settings: {}
+      };
+      await fb.setDoc(ref, ws);
+      localStorage.setItem('tf_workspace_' + user.uid, ref.id);
+      box.remove();
+      alert('✓ Área "' + name + '" criada! A página vai recarregar.');
+      location.reload();
+    }catch(e){
+      console.error('[TaskFlow/Emergency] Falha criando workspace:', e);
+      alert('Erro: ' + e.message);
+    }
+  };
+};
+</script>
 <script type="module">
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import{initializeFirestore,getFirestore,collection,addDoc,onSnapshot,doc,updateDoc,deleteDoc,query,where,serverTimestamp,getDocs,getDoc,setDoc}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
