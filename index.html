@@ -1702,7 +1702,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
 <script type="module">
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import{initializeFirestore,getFirestore,collection,addDoc,onSnapshot,doc,updateDoc,deleteDoc,query,where,serverTimestamp,getDocs,getDoc,setDoc}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import{getAuth,GoogleAuthProvider,signInWithPopup,createUserWithEmailAndPassword,signInWithEmailAndPassword,onAuthStateChanged,signOut,updateProfile,sendPasswordResetEmail,deleteUser}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import{getAuth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,createUserWithEmailAndPassword,signInWithEmailAndPassword,onAuthStateChanged,signOut,updateProfile,sendPasswordResetEmail,deleteUser}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 const FB={apiKey:"AIzaSyB3MZEZ4eRbxZ7LexS1T4nMrQuJUD_8yrE",authDomain:"taskflow-app-eb4bd.firebaseapp.com",projectId:"taskflow-app-eb4bd",storageBucket:"taskflow-app-eb4bd.firebasestorage.app",messagingSenderId:"461065102887",appId:"1:461065102887:web:513d949072895037d3d002"};
 const fapp=initializeApp(FB);
@@ -1794,10 +1794,6 @@ onAuthStateChanged(auth,user=>{
       var db2 = window._db;
       for(var i=0;i<30&&!db2;i++){ await new Promise(function(r){setTimeout(r,200);}); db2=window._db; }
       if(db2) await loadUserWorkspaces(user);
-      // Process workspace invite link if present in URL (?joinWs=TOKEN)
-      if(db2 && typeof checkWorkspaceJoinToken==='function'){
-        try{ await checkWorkspaceJoinToken(); }catch(e){ console.warn('checkWorkspaceJoinToken:',e); }
-      }
     })();setTimeout(checkDueTasks,5000);
     setTimeout(checkWeeklyDigest,7000);
     setTimeout(function(){loadPendingNotifications(cu);},4000);setTimeout(function(){TF.checkJoinToken&&TF.checkJoinToken();},2000);setTimeout(initPresence,5000);
@@ -2671,7 +2667,61 @@ function renderGantt(cid,list){
 }
 
 // ── AUTH BUTTONS ──
-$i('btn-google').onclick=async function(){try{this.disabled=true;this.textContent='Abrindo...';var gRes=await signInWithPopup(auth,gp);if(gRes&&gRes.user)await saveUserProfile(gRes.user,gRes.user.displayName,gRes.user.email)}catch(e){this.disabled=false;this.innerHTML='<svg viewBox="0 0 24 24" width="18"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Entrar com Google';if(e.code!=='auth/popup-closed-by-user')toast('Erro: '+e.message,'err')}};
+$i('btn-google').onclick=async function(){
+  var btn=this;
+  btn.disabled=true;
+  btn.textContent='Abrindo...';
+  // Detect Safari (popup is unreliable on Safari due to tracking prevention)
+  var ua=navigator.userAgent;
+  var isSafari=/^((?!chrome|android|crios|fxios|edg).)*safari/i.test(ua);
+  var restoreBtn=function(){
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" width="18"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Entrar com Google';
+  };
+  try{
+    if(isSafari){
+      // Safari: use redirect (page will reload via Google, then come back)
+      localStorage.setItem('tf_pending_google_login','1');
+      await signInWithRedirect(auth,gp);
+      // execution continues on page after redirect
+      return;
+    }
+    var gRes=await signInWithPopup(auth,gp);
+    if(gRes&&gRes.user)await saveUserProfile(gRes.user,gRes.user.displayName,gRes.user.email);
+  }catch(e){
+    // Popup blocked / closed / disabled → fallback to redirect
+    var shouldFallback=e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment'||e.code==='auth/cancelled-popup-request';
+    if(shouldFallback){
+      try{
+        localStorage.setItem('tf_pending_google_login','1');
+        await signInWithRedirect(auth,gp);
+        return;
+      }catch(e2){
+        restoreBtn();
+        toast('Erro: '+e2.message,'err');
+        return;
+      }
+    }
+    restoreBtn();
+    if(e.code!=='auth/popup-closed-by-user')toast('Erro: '+e.message,'err');
+  }
+};
+
+// Handle redirect result on page load (for Safari / popup fallback)
+(async function handleGoogleRedirect(){
+  try{
+    var pending=localStorage.getItem('tf_pending_google_login');
+    if(!pending)return;
+    var result=await getRedirectResult(auth);
+    localStorage.removeItem('tf_pending_google_login');
+    if(result&&result.user){
+      try{ await saveUserProfile(result.user,result.user.displayName,result.user.email); }catch(_e){}
+    }
+  }catch(e){
+    localStorage.removeItem('tf_pending_google_login');
+    console.warn('getRedirectResult:',e);
+  }
+})();
 // Anonymous login disabled — use email/Google auththis.textContent='Continuar como convidado';toast('Erro: '+e.message,'err')}};
 
 // ════════════════════════════════════════════════
@@ -11669,43 +11719,8 @@ async function joinWorkspaceByCode(code, user){
     var snap = await fb.getDocs(q);
     if(snap.empty){ toast('Código inválido','err'); return; }
     var wsDoc = snap.docs[0];
-    var wsData = wsDoc.data();
-    var wsObj = Object.assign({id: wsDoc.id}, wsData);
-
-    // Already a member?
-    if((wsData.members||[]).includes(user.uid)){
-      toast('Você já é membro de "'+wsData.name+'"!');
-      // Switch to it if already in list; otherwise push
-      if(!(_userWorkspaces||[]).find(function(w){return w.id===wsObj.id;})){
-        _userWorkspaces.push(wsObj); window._userWorkspaces = _userWorkspaces;
-      }
-      await switchWorkspace(wsObj, true);
-      if(typeof subscribeSpaces==='function') subscribeSpaces();
-      return;
-    }
-
-    // Requires approval?
-    if(wsData.requireApproval){
-      var alreadyPending = (wsData.pendingRequests||[]).some(function(r){return r.uid===user.uid;});
-      if(alreadyPending){
-        toast('Seu pedido já está aguardando aprovação','info');
-        return;
-      }
-      var request = {
-        uid: user.uid,
-        email: user.email || '',
-        name: user.displayName || '',
-        requestedAt: Date.now(),
-        via: 'code'
-      };
-      await fb.updateDoc(wsDoc.ref, { pendingRequests: fb.arrayUnion(request) });
-      toast('⏳ Pedido enviado! Aguardando aprovação do admin de "'+wsData.name+'"');
-      return;
-    }
-
-    // Direct join
     await fb.updateDoc(wsDoc.ref, { members: fb.arrayUnion(user.uid) });
-    var ws = Object.assign({id: wsDoc.id}, wsData, {members: [...(wsData.members||[]), user.uid]});
+    var ws = Object.assign({id: wsDoc.id}, wsDoc.data(), {members: [...(wsDoc.data().members||[]), user.uid]});
     _userWorkspaces.push(ws);
     window._userWorkspaces = _userWorkspaces;
     await switchWorkspace(ws, false);
@@ -11780,9 +11795,8 @@ TF.showWorkspaceSwitcher = function(){
     +'</div>'
     +'<div style="padding:16px 20px">'
     +wsList
-    +(_currentWorkspace?'<button onclick="document.getElementById(\'ws-switcher\').remove();TF.showWorkspaceInvite(\''+_currentWorkspace.id+'\')" style="width:100%;padding:10px;border-radius:10px;background:var(--accent);color:white;border:none;cursor:pointer;font-size:13px;font-weight:500;margin-bottom:8px">🔗 Convidar pessoas para esta área</button>':'')
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +'<button onclick="TF.showCreateWorkspace()" style="padding:10px;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;font-size:13px;color:var(--text2)">+ Criar nova</button>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">'
+    +'<button onclick="TF.showCreateWorkspace()" style="padding:10px;border-radius:10px;background:var(--accent);color:white;border:none;cursor:pointer;font-size:13px;font-weight:500">+ Criar nova</button>'
     +'<button onclick="TF.showJoinWorkspace()" style="padding:10px;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;font-size:13px;color:var(--text2)">Entrar com código</button>'
     +'</div>'
     +'<button onclick="document.getElementById(\'ws-switcher\').remove()" style="width:100%;padding:8px;border-radius:8px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--text3);margin-top:8px">Fechar</button>'
@@ -11915,7 +11929,7 @@ TF.showWorkspaceSettings = function(){
     +'<div><div style="font-size:14px;font-weight:600;color:var(--text)">'+ws.name+'</div>'
     +'<div style="font-size:11.5px;color:var(--text3)">Código de convite: <strong style="color:var(--accent2);letter-spacing:2px">'+ws.inviteCode+'</strong></div>'
     +'</div>'
-    +(isAdmin?'<button onclick="document.getElementById(\'ws-settings-modal\').remove();TF.showWorkspaceInvite(\''+ws.id+'\')" style="margin-left:auto;padding:5px 12px;border-radius:8px;background:var(--accent);color:white;border:none;cursor:pointer;font-size:12px;font-weight:500">🔗 Convidar</button>':'')
+    +(isAdmin?'<button onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+ws.inviteCode+'\').then(function(){toast(\'Código copiado!\')})" style="margin-left:auto;padding:5px 12px;border-radius:8px;background:var(--bg4);border:1px solid var(--border2);cursor:pointer;font-size:12px;color:var(--text2)">📋 Copiar</button>':'')
     +'</div>'
     +'<div style="font-size:12px;color:var(--text3)">Membros: '+(ws.members||[]).length+' · Criado em '+(ws.createdAt?new Date(ws.createdAt.seconds*1000).toLocaleDateString('pt-BR'):'?')+'</div>'
     +'</div>'
@@ -11947,333 +11961,6 @@ TF._renameWorkspace = async function(){
     toast('✓ Área renomeada!');
   }catch(e){ toast('Erro: '+e.message,'err'); }
 };
-
-// ═══════════════════════════════════════════════════════════════════
-// WORKSPACE INVITES — Link mágico + código + aprovação opcional
-// ═══════════════════════════════════════════════════════════════════
-
-// ── Generate a new shareable invite link (token in ws_invites, 7d TTL) ──
-TF.generateWorkspaceInviteLink = async function(wsId){
-  var ws = (_userWorkspaces||[]).find(function(w){return w.id===wsId;}) || _currentWorkspace;
-  if(!ws){ toast('Área não encontrada','err'); return null; }
-  var user = window.cu || window._currentUser;
-  if(!user){ toast('Faça login','err'); return null; }
-  try{
-    var fb = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    // Token: 24 chars, URL-safe
-    var token = (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)).slice(0,24);
-    var expiresAt = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
-    await fb.setDoc(fb.doc(window._db,'ws_invites',token),{
-      workspaceId: ws.id,
-      workspaceName: ws.name,
-      createdBy: user.uid,
-      createdByEmail: user.email || '',
-      createdAt: Date.now(),
-      expiresAt: expiresAt,
-      uses: 0
-    });
-    var base = window.location.origin + window.location.pathname;
-    // Strip any trailing query/hash
-    base = base.split('?')[0].split('#')[0];
-    return { token: token, url: base + '?joinWs=' + token, expiresAt: expiresAt };
-  }catch(e){
-    console.error('generateWorkspaceInviteLink:', e);
-    toast('Erro ao gerar link: '+e.message,'err');
-    return null;
-  }
-};
-
-// ── Show the invite modal (link + code + QR + approval toggle) ──
-TF.showWorkspaceInvite = async function(wsId){
-  var ws = (_userWorkspaces||[]).find(function(w){return w.id===wsId;}) || _currentWorkspace;
-  if(!ws){ toast('Área não encontrada','err'); return; }
-  var user = window.cu || window._currentUser;
-  var isAdmin = user && ws.adminIds && ws.adminIds.includes(user.uid);
-
-  var old = document.getElementById('ws-invite-modal'); if(old) old.remove();
-  var box = document.createElement('div');
-  box.id = 'ws-invite-modal';
-  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9200;padding:20px';
-
-  var requireApproval = !!ws.requireApproval;
-  var pendingCount = Array.isArray(ws.pendingRequests) ? ws.pendingRequests.length : 0;
-
-  box.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)">'
-    +'<div style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
-    +'<div><div style="font-size:15px;font-weight:600;color:var(--text)">🔗 Convidar para '+ws.name+'</div>'
-    +'<div style="font-size:11.5px;color:var(--text3)">Compartilhe o link ou código com sua equipe</div></div>'
-    +'<button id="wsinv-close" style="width:28px;height:28px;border-radius:50%;background:var(--bg4);border:1px solid var(--border2);cursor:pointer;color:var(--text2);font-size:16px">×</button>'
-    +'</div>'
-    +'<div style="padding:20px">'
-    // Link section (loading, will be filled async)
-    +'<div style="margin-bottom:18px">'
-    +'<label style="font-size:12px;color:var(--text2);font-weight:500;display:block;margin-bottom:6px">🪄 Link mágico (expira em 7 dias)</label>'
-    +'<div id="wsinv-link-row" style="display:flex;gap:8px;align-items:center">'
-    +'<div style="flex:1;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg3);font-size:12px;color:var(--text3);font-family:ui-monospace,SFMono-Regular,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Gerando link...</div>'
-    +'</div>'
-    +'<div id="wsinv-link-meta" style="font-size:11px;color:var(--text3);margin-top:6px"></div>'
-    +'</div>'
-
-    // Code section
-    +'<div style="margin-bottom:18px">'
-    +'<label style="font-size:12px;color:var(--text2);font-weight:500;display:block;margin-bottom:6px">🔢 Ou use o código fixo</label>'
-    +'<div style="display:flex;gap:8px;align-items:center">'
-    +'<div style="flex:1;padding:10px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg3);font-size:18px;color:var(--accent2);font-weight:700;letter-spacing:4px;text-align:center;font-family:ui-monospace,SFMono-Regular,monospace">'+ws.inviteCode+'</div>'
-    +'<button onclick="TF._copyText(\''+ws.inviteCode+'\',\'Código copiado!\')" style="padding:10px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;color:var(--text2);font-size:12px">📋</button>'
-    +'</div>'
-    +'<div style="font-size:11px;color:var(--text3);margin-top:6px">Quem tiver este código pode entrar digitando em "Entrar com código"</div>'
-    +'</div>'
-
-    // QR code (for mobile)
-    +'<div id="wsinv-qr-wrap" style="margin-bottom:18px;text-align:center"></div>'
-
-    // Approval toggle (admin only)
-    +(isAdmin ? '<div style="margin-bottom:16px;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:10px">'
-      +'<div style="display:flex;align-items:center;gap:12px">'
-      +'<div style="flex:1">'
-      +'<div style="font-size:13px;font-weight:500;color:var(--text)">Exigir aprovação</div>'
-      +'<div style="font-size:11.5px;color:var(--text3);margin-top:2px">Quando ativado, novos membros ficam pendentes até você aprovar</div>'
-      +'</div>'
-      +'<label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0">'
-      +'<input type="checkbox" id="wsinv-approval" '+(requireApproval?'checked':'')+' onchange="TF.toggleWorkspaceApproval(\''+ws.id+'\', this.checked)" style="opacity:0;width:0;height:0">'
-      +'<span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:'+(requireApproval?'var(--accent)':'var(--bg4)')+';border-radius:24px;transition:.2s;border:1px solid var(--border2)">'
-      +'<span style="position:absolute;content:\'\';height:18px;width:18px;left:'+(requireApproval?'22px':'2px')+';bottom:2px;background:white;border-radius:50%;transition:.2s"></span>'
-      +'</span>'
-      +'</label>'
-      +'</div>'
-      +(pendingCount>0?'<div style="margin-top:12px;padding-top:12px;border-top:.5px solid var(--border)"><button onclick="TF.showPendingRequests(\''+ws.id+'\')" style="width:100%;padding:9px;border-radius:8px;background:var(--amber-bg,#FAEEDA);border:1px solid #EF9F2744;cursor:pointer;font-size:13px;color:#B75F0F;font-weight:500">⏳ '+pendingCount+' pedido'+(pendingCount>1?'s':'')+' pendente'+(pendingCount>1?'s':'')+'</button></div>':'')
-      +'</div>' : '')
-
-    +'<button onclick="document.getElementById(\'ws-invite-modal\').remove()" style="width:100%;padding:10px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;color:var(--text2);font-size:13px">Fechar</button>'
-    +'</div></div>';
-
-  document.body.appendChild(box);
-  document.getElementById('wsinv-close').onclick = function(){ box.remove(); };
-  box.onclick = function(e){ if(e.target===box) box.remove(); };
-
-  // Generate the link async and fill in
-  var linkData = await TF.generateWorkspaceInviteLink(ws.id);
-  var row = document.getElementById('wsinv-link-row');
-  var meta = document.getElementById('wsinv-link-meta');
-  if(row && linkData){
-    row.innerHTML =
-      '<input readonly value="'+linkData.url+'" id="wsinv-link-input" style="flex:1;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg3);font-size:11.5px;color:var(--text2);font-family:ui-monospace,SFMono-Regular,monospace" onclick="this.select()">'
-      +'<button onclick="TF._copyText(\''+linkData.url+'\',\'Link copiado!\')" style="padding:10px 14px;border-radius:8px;background:var(--accent);color:white;border:none;cursor:pointer;font-size:12px;font-weight:500">📋 Copiar</button>';
-    var expDate = new Date(linkData.expiresAt);
-    meta.textContent = 'Válido até ' + expDate.toLocaleDateString('pt-BR') + ' às ' + expDate.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-    // QR code using free API
-    var qrWrap = document.getElementById('wsinv-qr-wrap');
-    if(qrWrap){
-      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(linkData.url) + '&bgcolor=FFFFFF&margin=8';
-      qrWrap.innerHTML = '<details style="text-align:center"><summary style="cursor:pointer;font-size:12px;color:var(--text3);padding:6px;user-select:none">📱 Mostrar QR code</summary>'
-        +'<div style="margin-top:10px;padding:12px;background:white;border-radius:10px;display:inline-block"><img src="'+qrUrl+'" width="160" height="160" alt="QR" style="display:block"></div></details>';
-    }
-  } else if(row){
-    row.innerHTML = '<div style="flex:1;padding:10px 12px;border:1px solid var(--red);border-radius:8px;background:var(--bg3);font-size:12px;color:var(--red)">Falha ao gerar link. Tente novamente.</div>';
-  }
-};
-
-// Helper: copy text with clipboard fallback
-TF._copyText = function(text, successMsg){
-  var ok = function(){ if(typeof toast==='function') toast('✓ '+ (successMsg||'Copiado!')); };
-  var fail = function(){ if(typeof toast==='function') toast('Não foi possível copiar','err'); };
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(ok, function(){
-      // Fallback for restricted contexts
-      try{
-        var ta = document.createElement('textarea');
-        ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px';
-        document.body.appendChild(ta); ta.select();
-        document.execCommand('copy'); document.body.removeChild(ta); ok();
-      }catch(e){ fail(); }
-    });
-  } else {
-    try{
-      var ta = document.createElement('textarea');
-      ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px';
-      document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); document.body.removeChild(ta); ok();
-    }catch(e){ fail(); }
-  }
-};
-
-// ── Toggle whether workspace requires approval for new members ──
-TF.toggleWorkspaceApproval = async function(wsId, enabled){
-  var ws = (_userWorkspaces||[]).find(function(w){return w.id===wsId;}) || _currentWorkspace;
-  if(!ws) return;
-  try{
-    var fb = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    await fb.updateDoc(fb.doc(window._db,'workspaces',ws.id),{requireApproval: !!enabled});
-    ws.requireApproval = !!enabled;
-    toast(enabled?'🔒 Aprovação ativada':'🔓 Aprovação desativada');
-  }catch(e){
-    console.error('toggleWorkspaceApproval:', e);
-    toast('Erro: '+e.message,'err');
-  }
-};
-
-// ── Show pending join requests for admin ──
-TF.showPendingRequests = async function(wsId){
-  var ws = (_userWorkspaces||[]).find(function(w){return w.id===wsId;}) || _currentWorkspace;
-  if(!ws) return;
-  var requests = ws.pendingRequests || [];
-
-  var old = document.getElementById('ws-requests-modal'); if(old) old.remove();
-  var box = document.createElement('div');
-  box.id = 'ws-requests-modal';
-  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9300;padding:20px';
-
-  var reqHtml = requests.length ? requests.map(function(r){
-    var when = r.requestedAt ? new Date(r.requestedAt).toLocaleString('pt-BR') : '';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border2);border-radius:10px;margin-bottom:8px;background:var(--bg3)">'
-      +'<div style="width:34px;height:34px;border-radius:50%;background:var(--accent);color:white;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(r.name||r.email||'?').charAt(0).toUpperCase()+'</div>'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.name||r.email||'Usuário')+'</div>'
-      +'<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.email||'')+(when?' · '+when:'')+'</div>'
-      +'</div>'
-      +'<button onclick="TF.approveWorkspaceRequest(\''+ws.id+'\',\''+r.uid+'\')" style="padding:6px 12px;border-radius:6px;background:var(--accent);color:white;border:none;cursor:pointer;font-size:12px;font-weight:500">✓ Aprovar</button>'
-      +'<button onclick="TF.rejectWorkspaceRequest(\''+ws.id+'\',\''+r.uid+'\')" style="padding:6px 10px;border-radius:6px;background:var(--bg4);color:var(--text2);border:1px solid var(--border2);cursor:pointer;font-size:12px">✕</button>'
-      +'</div>';
-  }).join('') : '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">Nenhum pedido pendente</div>';
-
-  box.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:480px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)">'
-    +'<div style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
-    +'<div><div style="font-size:15px;font-weight:600;color:var(--text)">⏳ Pedidos pendentes</div>'
-    +'<div style="font-size:11.5px;color:var(--text3)">'+requests.length+' aguardando aprovação</div></div>'
-    +'<button id="wsreq-close" style="width:28px;height:28px;border-radius:50%;background:var(--bg4);border:1px solid var(--border2);cursor:pointer;color:var(--text2);font-size:16px">×</button>'
-    +'</div>'
-    +'<div style="padding:16px 20px">'+reqHtml+'</div>'
-    +'</div>';
-  document.body.appendChild(box);
-  document.getElementById('wsreq-close').onclick = function(){ box.remove(); };
-  box.onclick = function(e){ if(e.target===box) box.remove(); };
-};
-
-TF.approveWorkspaceRequest = async function(wsId, uid){
-  var ws = (_userWorkspaces||[]).find(function(w){return w.id===wsId;}) || _currentWorkspace;
-  if(!ws) return;
-  try{
-    var fb = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    var req = (ws.pendingRequests||[]).find(function(r){return r.uid===uid;});
-    var newPending = (ws.pendingRequests||[]).filter(function(r){return r.uid!==uid;});
-    var newMembers = Array.from(new Set([].concat(ws.members||[], [uid])));
-    await fb.updateDoc(fb.doc(window._db,'workspaces',ws.id),{
-      members: newMembers,
-      pendingRequests: newPending
-    });
-    ws.members = newMembers;
-    ws.pendingRequests = newPending;
-    toast('✓ '+(req&&(req.name||req.email)||'Usuário')+' aprovado!');
-    // Re-render pending list
-    var old = document.getElementById('ws-requests-modal'); if(old){ old.remove(); TF.showPendingRequests(wsId); }
-  }catch(e){
-    console.error('approveWorkspaceRequest:', e);
-    toast('Erro: '+e.message,'err');
-  }
-};
-
-TF.rejectWorkspaceRequest = async function(wsId, uid){
-  var ws = (_userWorkspaces||[]).find(function(w){return w.id===wsId;}) || _currentWorkspace;
-  if(!ws) return;
-  try{
-    var fb = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    var newPending = (ws.pendingRequests||[]).filter(function(r){return r.uid!==uid;});
-    await fb.updateDoc(fb.doc(window._db,'workspaces',ws.id),{pendingRequests: newPending});
-    ws.pendingRequests = newPending;
-    toast('Pedido rejeitado');
-    var old = document.getElementById('ws-requests-modal'); if(old){ old.remove(); TF.showPendingRequests(wsId); }
-  }catch(e){
-    console.error('rejectWorkspaceRequest:', e);
-    toast('Erro: '+e.message,'err');
-  }
-};
-
-// ── Check URL for ?joinWs=TOKEN on login and handle workspace join ──
-async function checkWorkspaceJoinToken(){
-  var params = new URLSearchParams(window.location.search);
-  var token = params.get('joinWs');
-  if(!token) return;
-  var user = window.cu || window._currentUser;
-  if(!user || !window._db) return;
-
-  try{
-    var fb = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    var snap = await fb.getDoc(fb.doc(window._db,'ws_invites',token));
-    if(!snap.exists()){
-      toast('Link de convite inválido','err');
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-    var inv = snap.data();
-    if(inv.expiresAt && inv.expiresAt < Date.now()){
-      toast('Este link de convite expirou','err');
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-    // Load the target workspace
-    var wsSnap = await fb.getDoc(fb.doc(window._db,'workspaces',inv.workspaceId));
-    if(!wsSnap.exists()){
-      toast('Área de trabalho não existe mais','err');
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-    var ws = Object.assign({id: wsSnap.id}, wsSnap.data());
-
-    // Already a member? Just switch to it
-    if((ws.members||[]).includes(user.uid)){
-      toast('Você já é membro de "'+ws.name+'"!');
-      window.history.replaceState({}, document.title, window.location.pathname);
-      // Make sure it's in the list and switch
-      if(!(_userWorkspaces||[]).find(function(w){return w.id===ws.id;})){
-        _userWorkspaces.push(ws); window._userWorkspaces = _userWorkspaces;
-      }
-      await switchWorkspace(ws, true);
-      if(typeof subscribeSpaces==='function') subscribeSpaces();
-      return;
-    }
-
-    // Requires approval?
-    if(ws.requireApproval){
-      var alreadyPending = (ws.pendingRequests||[]).some(function(r){return r.uid===user.uid;});
-      if(alreadyPending){
-        toast('Seu pedido já está aguardando aprovação','info');
-      } else {
-        var request = {
-          uid: user.uid,
-          email: user.email || '',
-          name: user.displayName || '',
-          requestedAt: Date.now(),
-          via: 'link',
-          inviteToken: token
-        };
-        await fb.updateDoc(fb.doc(window._db,'workspaces',ws.id),{
-          pendingRequests: fb.arrayUnion(request)
-        });
-        toast('⏳ Pedido enviado! Aguardando aprovação do admin de "'+ws.name+'"');
-      }
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-
-    // Direct join
-    await fb.updateDoc(fb.doc(window._db,'workspaces',ws.id),{
-      members: fb.arrayUnion(user.uid)
-    });
-    // Increment uses (best effort)
-    try{ await fb.updateDoc(fb.doc(window._db,'ws_invites',token),{uses: (inv.uses||0)+1, lastUsedAt: Date.now()}); }catch(_e){}
-    ws.members = Array.from(new Set([].concat(ws.members||[], [user.uid])));
-    _userWorkspaces.push(ws); window._userWorkspaces = _userWorkspaces;
-    localStorage.setItem('tf_workspace_'+user.uid, ws.id);
-    window.history.replaceState({}, document.title, window.location.pathname);
-    toast('🎉 Bem-vindo a "'+ws.name+'"!');
-    await switchWorkspace(ws, true);
-    if(typeof subscribeSpaces==='function') subscribeSpaces();
-  }catch(e){
-    console.error('checkWorkspaceJoinToken:', e);
-    toast('Erro ao processar convite: '+e.message,'err');
-  }
-}
-window.checkWorkspaceJoinToken = checkWorkspaceJoinToken;
 
 
 // ═══════════════════════════════════════════════════════════════════
